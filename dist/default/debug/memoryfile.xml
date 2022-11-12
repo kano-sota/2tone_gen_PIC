@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <executable name="dist/default/debug\2TONE_GEN_PIC.X.debug.hex">
+    <memory name="program">
+      <units>words</units>
+      <length>8192</length>
+      <used>5310</used>
+      <free>2882</free>
+    </memory>
+    <memory name="data">
+      <units>bytes</units>
+      <length>1024</length>
+      <used>711</used>
+      <free>313</free>
+    </memory>
+  </executable>
+</project>
