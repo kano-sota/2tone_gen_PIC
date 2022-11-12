@@ -1,3 +1,6 @@
-**/*.X/nbproject/Makefile-*
-**/*.X/nbproject/Package-default.bash
-**/*.X/nbproject/private
+nbproject/Makefile-*
+nbproject/Package-default.bash
+nbproject/private
+build
+dist
+debug
