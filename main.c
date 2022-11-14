@@ -38,8 +38,8 @@
 #include <math.h>
 #include "myLCD_sc1602.h"
 
-#define SAMPLING_FREQ 80000 // up to 100 kHz
-#define FREQ_STEP 100
+#define SAMPLING_FREQ 32000 // up to 100 kHz
+#define FREQ_STEP 40
 #define SINE_TABLE_N 200    // SAMPLING_FREQ / FREQ_STEP / 4
 
 #define RE_A 
@@ -49,14 +49,6 @@
 #define SW4
 #define SW5
 
-void Timer_init(void);
-void DAC_init(void);
-void DAC_valueset(uint8_t value);
-uint8_t RE_read(void);
-
-void sine_table_gen(uint8_t amp);
-void wave_out(void);
-
 typedef enum {
     Sinusoidal,
     Pulse,
@@ -64,10 +56,25 @@ typedef enum {
     Saw,
 } Wavetype;
 
+typedef struct {
+    uint16_t freq;
+    uint8_t amp;
+    uint8_t index;
+    uint8_t index_step;
+    uint8_t stage;
+} wave;
+
+void Timer_init(void);
+void DAC_init(void);
+void DAC_valueset(uint8_t value);
+//uint8_t RE_read(void);
+
+void sine_table_gen(uint8_t amp);
+uint8_t wave_out(wave* w);
+
 uint8_t sine_table[SINE_TABLE_N];
-uint16_t freq = 1000;
-uint8_t step;
 Wavetype wavetype = Sinusoidal;
+wave wave1, wave2;
 
 int main(void) {
     ANSELA = 0x00;    // Disable analog inputs
@@ -79,6 +86,15 @@ int main(void) {
     PORTB  = 0x00;
     PORTC  = 0x00;
     
+    uint8_t out = 0;
+    
+    wave1.freq = 1800;
+    wave1.index_step = (uint8_t) (wave1.freq / FREQ_STEP);
+    wave1.stage = 0;
+    wave2.freq = 2000;
+    wave2.index_step = (uint8_t) (wave2.freq / FREQ_STEP);
+    wave2.stage = 0;
+    
     lcd_init();
     Timer_init();
     DAC_init();
@@ -86,19 +102,7 @@ int main(void) {
     
     lcd_puts("Hello,world!");
     
-    uint8_t out = 0;
-    
-    freq = 700;
-    step = (uint8_t) (freq / FREQ_STEP);
-    
     while(1) {
-//        out++;
-//        if (out > 255) out = 0;
-//        DAC_valueset(out);
-        freq = 700; step = (uint8_t) (freq / FREQ_STEP); RA2 = 1;
-        __delay_ms(1000);
-        RA2 = 0;
-        freq = 2000; step = (uint8_t) (freq / FREQ_STEP);
         __delay_ms(1000);
     }
     
@@ -112,14 +116,14 @@ void Timer_init(void) {
     TMR2IE = 1; // Enables the Timer2 to PR2 match interrupt
     PEIE = 1;   // Enables all active peripheral interrupts
     GIE = 1;    // Enables all active interrupts
-    PR2 = (uint8_t)((uint32_t)_XTAL_FREQ/((uint32_t)SAMPLING_FREQ * 4) - 1);   // PR2=(Fosc/(Fout×4×TMR2 Prescaler Value))-1
-    T2CON = 0b10000000;     // Timer2 ON, prescaller 1:1, postscaler1:1
+    PR2 = (uint8_t)((uint32_t)_XTAL_FREQ/((uint32_t)SAMPLING_FREQ * 8) - 1);   // PR2=(Fosc/(Fout×4×TMR2 Prescaler Value))-1
+    T2CON = 0b10010000;     // Timer2 ON, prescaller 1:1, postscaler1:1
     
 }
 
 void DAC_init(void) {
     DAC1CON0 = 0b11101000;    // DAC config: EN=1, FM=1(8bit+2bit), OE1=1, PSS=10=FVR
-    FVRCON = 0b10001100;    // FVR config: FVREN=1, CDAFVR=01(1.024V), 10(2.048V), 11(4.096V)
+    FVRCON = 0b10000100;    // FVR config: FVREN=1, CDAFVR=01(1.024V), 10(2.048V), 11(4.096V)
 }
 
 void DAC_valueset(uint8_t value) {
@@ -128,48 +132,49 @@ void DAC_valueset(uint8_t value) {
     DACLD = 0b00000001; // write to buffer
 }
 
-uint8_t RE_read(void){
-  static const uint8_t RE_states[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0};
-  static uint8_t RE_old = 0;               // 共通変数（値は保存）
-  char RE_now;
-  RE_now = B_PIN * 2 + A_PIN;           // 今回情報の読取
-  RE_old <<= 2;                         // 前回の読取値と
-  RE_old |= ( RE_now & 0x03 );          // 今回の読取値を組合わせる
-  return (RE_states[(RE_old & 0x0F)]);  // 変化分を戻り値をする
-}
+//uint8_t RE_read(void){
+//  static const uint8_t RE_states[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0};
+//  static uint8_t RE_old = 0;               // 共通変数（値は保存）
+//  char RE_now;
+//  RE_now = B_PIN * 2 + A_PIN;           // 今回情報の読取
+//  RE_old <<= 2;                         // 前回の読取値と
+//  RE_old |= ( RE_now & 0x03 );          // 今回の読取値を組合わせる
+//  return (RE_states[(RE_old & 0x0F)]);  // 変化分を戻り値をする
+//}
 
 void sine_table_gen(uint8_t amp) {
     // Generate a sine wave table for a quarter cycle
     for (uint8_t i = 0; i < SINE_TABLE_N; i++) {
-        *(sine_table + i) = (uint8_t)((float)127 * sinf(1.5708f * (float)i / SINE_TABLE_N)) + 127;
+        *(sine_table + i) = (uint8_t)((float)31 * sinf(1.5708f * (float)i / SINE_TABLE_N) + 63);
     }
 }
 
-void wave_out(void) {
-    static uint8_t i = 0;
-    static uint8_t stage = 0;
+uint8_t wave_out(wave* w) {
+    uint8_t out;
     
     if (wavetype == Sinusoidal) {
-        if (stage == 0) {
-            DAC_valueset(sine_table[i]);
-        } else if (stage == 1) {
-            DAC_valueset(sine_table[SINE_TABLE_N - i - 1]);
-        } else if (stage == 2) {
-            DAC_valueset(254 - sine_table[i]);
-        } else if (stage == 3) {
-            DAC_valueset(254 - sine_table[SINE_TABLE_N - i - 1]);
+        if (w->stage == 0) {
+            out = sine_table[w->index];
+        } else if (w->stage == 1) {
+            out = sine_table[SINE_TABLE_N - w->index - 1];
+        } else if (w->stage == 2) {
+            out = 126 - sine_table[w->index];
+        } else if (w->stage == 3) {
+            out = 126 - sine_table[SINE_TABLE_N - w->index - 1];
         }
         
-        i += step;
-        if (i >= SINE_TABLE_N) {
-            i -= SINE_TABLE_N;
-            if (++stage >= 4) stage = 0;
+        w->index += w->index_step;
+        if (w->index >= SINE_TABLE_N) {
+            w->index -= SINE_TABLE_N;
+            if (++(w->stage) >= 4) w->stage = 0;
         }
     }
+    return out;
 }
 
 // Timer2 Interrupt
 void __interrupt() isr(void) {
     TMR2IF = 0;
-    wave_out();
+    DAC_valueset((uint8_t)(wave_out(&wave1) + wave_out(&wave2)));
+//    DAC_valueset(wave_out(&wave1));
 }
